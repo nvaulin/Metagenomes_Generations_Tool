@@ -15,8 +15,12 @@ def parse_args():
 
     parser.add_argument('-p', '--phenotype', default='2_species', nargs='?',
                         help='the base phenotype for metagenome construction ("Health", "HIV")')
-    parser.add_argument('file', default=None, nargs='?', help='read metagenome composition from the file '
-                                                              '(tsv with species and abudances)')
+    parser.add_argument('file', default=None, nargs='?',
+                        help='read metagenome composition from the file (tsv with species and abudances)')
+    parser.add_argument('email', default='example@email.com', nargs='?',
+                        help='Email address for Entrez requests')
+    parser.add_argument('api_key', default=None, nargs='?',
+                        help='NCBI API key for Entrez requests (if any)')
 
     return parser.parse_args()
 
@@ -117,11 +121,13 @@ def write_multifasta(prepared_abudances, genomes_dir):
 
 
 if __name__ == '__main__':
-    Entrez.email = 'vaulin13341@gmail.com'
-    Entrez.api_key = 'e9a99384ff1a40c5f3cba4e30d766d0b0508'
-
     pheno = parse_args().phenotype
     file = parse_args().file
+    email = parse_args().email
+    api_key = parse_args().api_key
+
+    Entrez.email = email
+    Entrez.api_key = api_key
 
     genomes_dir = os.path.join('genomes')
     baseline_abudances = pd.read_csv(os.path.join('baseline_phenotypes', pheno + '.tsv'), sep='\t', header=None)
