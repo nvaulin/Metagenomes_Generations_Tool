@@ -1,0 +1,11 @@
+name: metageneration
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - insilicoseq
+  - python=3.11
+  - pip
+  - pip:
+    - pandas
+    - Bio
