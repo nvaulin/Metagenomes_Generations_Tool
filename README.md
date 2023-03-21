@@ -1,7 +1,5 @@
 # Metagenomes metageneration metatool
 
-### BI x ITMO project 
-
 >  A simple and smart tool for generating Illumina readings of metagenomic communities with a given properties
 
 ### Installation
