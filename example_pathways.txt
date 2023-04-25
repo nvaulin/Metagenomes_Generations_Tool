@@ -1,0 +1,18 @@
+morphine biosynthesis
+N<sup>6</sup>-L-threonylcarbamoyladenosine<sup>37</sup>-modified tRNA biosynthesis
+mithramycin biosynthesis
+mimosine biosynthesis
+monoacylsucrose biosynthesis
+mixed acid fermentation
+microcin B17 biosynthesis
+mevalonate pathway III (Thermoplasma)
+NAD phosphorylation and transhydrogenation
+methymycin, neomethymycin and novamethymycin biosynthesis
+methylthiopropanonate degradation II (demethylation)
+N-end rule pathway I (prokaryotic)
+methylsalicylate degradation
+methylphosphonate degradation III
+methylphosphonate degradation I
+NADH to dimethyl sulfoxide electron transfer
+NADH to fumarate electron transfer
+NADH to hydrogen peroxide electron transfer

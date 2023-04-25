@@ -204,6 +204,9 @@ if __name__ == '__main__':
 
     genomes_dir = os.path.join('genomes')
     baseline_abudances = pd.read_csv(os.path.join('baseline_phenotypes', pheno + '.tsv'), sep='\t', header=None)
+    baseline_abudances.rename({0: 'species', 1: 'abundance'}, axis=1, inplace=True)
+    if n_core:
+        baseline_abudances = baseline_abudances.sort_values(by='abundance').head(n_core)
     pathways_db = pd.read_csv(os.path.join('Metabolites_database',
                                            'Pathways_MetaCyc.txt'), sep='\t').dropna(inplace=True)
     pathways_db = filter_pathways_db(pathways_db)
