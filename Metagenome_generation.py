@@ -5,6 +5,7 @@ import gzip
 import urllib.request
 import pandas as pd
 from Bio import Entrez, SeqIO, Seq
+from pysat.examples.hitman import Hitman
 
 
 def parse_args():
@@ -15,8 +16,10 @@ def parse_args():
 
     parser.add_argument('-p', '--phenotype', default='2_species', nargs='?',
                         help='the base phenotype for metagenome construction ("Health", "HIV")')
-    parser.add_argument('file', default=None, nargs='?',
+    parser.add_argument('-m', '--metagenome_file', default=None, nargs='?',
                         help='read metagenome composition from the file (tsv with species and abudances)')
+    parser.add_argument('pathways', default=None, nargs='?',
+                        help='read matebolic pathways to account from the file (each pathway on the new line')
     parser.add_argument('email', default='example@email.com', nargs='?',
                         help='Email address for Entrez requests')
     parser.add_argument('api_key', default=None, nargs='?',
@@ -101,8 +104,9 @@ def update_genomes(genomes_dir, baseline_abudances):
             specie_abudance_df = pd.DataFrame([tax_id, abudance])
             prepared_abudances = pd.concat([prepared_abudances, specie_abudance_df])
 
-    prepared_abudances.abudance = prepared_abudances.abudance/prepared_abudances.abudance.sum()
+    prepared_abudances.abudance = prepared_abudances.abudance / prepared_abudances.abudance.sum()
     return prepared_abudances
+
 
 def write_multifasta(prepared_abudances, genomes_dir):
     sequences = []
@@ -120,9 +124,75 @@ def write_multifasta(prepared_abudances, genomes_dir):
     return wr_code
 
 
+def filter_pathways_db(pathways_db):
+    junk_tax_ranges = ['Metazoa', 'Embryophyta', 'Tracheophyta', 'Pinidae', 'Brassicales', 'Gunneridae',
+                       'Spermatophyta', 'Vertebrata <vertebrates>', 'Fungi', 'Eukaryota', 'Mammalia',
+                       'cellular organisms', 'Viridiplantae', 'Magnoliopsida', 'Fungi // Viridiplantae',
+                       'Fungi // Metazoa', 'Viruses // Metazoa']
+    for junk_entry in junk_tax_ranges:
+        pathways_db = pathways_db[pathways_db['Taxonomic-Range'] != junk_entry]
+    selection = pathways_db['Taxonomic-Range'].str.contains('bact')
+    return pathways_db[selection]
+
+
+def preprocess_pathways_db(pathways_db):
+    pathways_db.Pathways = pathways_db[['Pathways']].replace('\(?<i>.+</i>\)?', '', regex=True)
+    pathways_db['Species'] = pathways_db['Species'].str.split('//').apply(
+        lambda l: [x.strip() for x in l]).values.tolist()
+    all_species = [item.strip() for sublist in pathways_db['Species'].values.tolist() for item in sublist]
+    pathways_db_exp = pathways_db[['Pathways', 'Species']].explode('Species')
+    euks = ['Homo sapiens', 'Arabidopsis thaliana', 'Saccharomyces cerevisiae', 'Glycine max', 'Pisum sativum',
+            'Rattus norvegicus', 'Solanum lycopersicum', 'Oryza sativa', 'Nicotiana tabacum']
+    mask = pathways_db_exp.Species.isin(euks)
+    pathways_db_exp = pathways_db_exp[~mask]
+    pathways_db_ct = pd.crosstab(index=pathways_db_exp.Pathways, columns=pathways_db_exp.Species)
+    pathways_db_ct = pathways_db_ct.astype(bool).astype(int)
+    return pathways_db_ct
+
+
+def do_hits(metagenome: list, metabolic_needs: list[list]):
+    h = Hitman(solver='m22', htype='lbx')
+    metagenome = set(metagenome)
+    needs_to_hit = []
+    for metabolic_need in metabolic_needs:
+        metabolic_need = set(metabolic_need)
+        if not set.intersection(metabolic_need, metagenome):
+            needs_to_hit.append(metabolic_need)
+    for need in needs_to_hit:
+        h.hit(need)
+    return h.get()
+
+
+def find_minimal_refill(metagenome, metabolites_specified, pathways_db):
+    cols = pathways_db.columns
+    selected_bathways = pathways_db.loc[metabolites_specified].astype('bool')
+    metabolic_needs = selected_bathways.apply(lambda x: list(cols[x.values]), axis=1).to_list()
+    return do_hits(metagenome, metabolic_needs)
+
+
+def append_species_refill(abudances, species_to_refill):
+    abundance_level = abudances[1].mean()
+    abundances_refill = pd.DataFrame([species_to_refill,
+                                      [abundance_level] * len(species_to_refill)],
+                                     index=[0, 1]).transpose()
+    abudances_new = pd.concat([abudances, abundances_refill])
+    abudances_new[1] = abudances_new[1] / abudances_new[1].sum()
+    return abudances_new
+
+def read_pathways(pathways_input):
+    if os.path.isfile(pathways_input.input):
+        with open(pathways_input, 'r') as f:
+            pathways = f.readlines()
+    elif ',' in pathways_input.input:
+        pathways = pathways_input.input.split(',')
+    else:
+        raise ValueError('Invalid input. Please provide a path to a file or a comma-separated string.')
+    return pathways
+
 if __name__ == '__main__':
     pheno = parse_args().phenotype
-    file = parse_args().file
+    metagenome_file = parse_args().metagenome_file
+    pathways = parse_args().pathways
     email = parse_args().email
     api_key = parse_args().api_key
 
@@ -131,5 +201,14 @@ if __name__ == '__main__':
 
     genomes_dir = os.path.join('genomes')
     baseline_abudances = pd.read_csv(os.path.join('baseline_phenotypes', pheno + '.tsv'), sep='\t', header=None)
-    prepared_abudances = update_genomes(genomes_dir, baseline_abudances)
+    pathways_db = pd.read_csv(os.path.join('Metabolites_database',
+                                           'Pathways_MetaCyc.txt'), sep='\t').dropna(inplace=True)
+    pathways_db = filter_pathways_db(pathways_db)
+    pathways_db = preprocess_pathways_db(pathways_db)
+
+    pathways_specified = read_pathways(pathways)
+    species_to_refill = find_minimal_refill(baseline_abudances[0].to_list(),
+                                            pathways_specified)
+    abudances_new = append_species_refill(baseline_abudances, species_to_refill)
+    prepared_abudances = update_genomes(genomes_dir, abudances_new)
     wr_code = write_multifasta(prepared_abudances, genomes_dir)
