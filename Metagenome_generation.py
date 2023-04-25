@@ -20,6 +20,8 @@ def parse_args():
                         help='read metagenome composition from the file (tsv with species and abudances)')
     parser.add_argument('pathways', default=None, nargs='?',
                         help='read matebolic pathways to account from the file (each pathway on the new line')
+    parser.add_argument('n_core', default=None, nargs='?',
+                        help='number of core species to leave in metagenome')
     parser.add_argument('email', default='example@email.com', nargs='?',
                         help='Email address for Entrez requests')
     parser.add_argument('api_key', default=None, nargs='?',
@@ -193,6 +195,7 @@ if __name__ == '__main__':
     pheno = parse_args().phenotype
     metagenome_file = parse_args().metagenome_file
     pathways = parse_args().pathways
+    n_core = parse_args().n_core
     email = parse_args().email
     api_key = parse_args().api_key
 
