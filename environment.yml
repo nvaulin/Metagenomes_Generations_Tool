@@ -4,9 +4,13 @@ channels:
   - bioconda
 dependencies:
   - insilicoseq
-  - python=3.11
+  - python=3.10
   - pip
   - pip:
       - pandas
-      - Bio
-      - pysat
+      - biopython
+      - python-sat
+      - scipy
+      - pysam
+      - future
+      - joblib
