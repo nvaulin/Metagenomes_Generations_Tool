@@ -21,6 +21,7 @@ def parse_args():
                         help='read matebolic pathways to account from the file (each pathway on the new line')
     parser.add_argument('n_core', default=None, nargs='?',
                         help='number of core species to leave in metagenome')
+    parser.add_argument('-t', '--threads', default=1, help='number of threads (cores)')
     parser.add_argument('email', default='example@email.com', nargs='?',
                         help='Email address for Entrez requests')
     parser.add_argument('api_key', default=None, nargs='?',
@@ -102,6 +103,7 @@ if __name__ == '__main__':
     metagenome_file = parse_args().metagenome_file
     pathways = parse_args().pathways
     n_core = parse_args().n_core
+    n_threads = parse_args().threads
     email = parse_args().email
     api_key = parse_args().api_key
 
@@ -127,5 +129,5 @@ if __name__ == '__main__':
     prepared_abudances = update_genomes(genomes_dir, abundances)
     wr_code = write_multifasta(prepared_abudances, genomes_dir)
     print('\n')
-    iss_cmd = 'iss generate -g multifasta.fna --abundance_file abundances.txt --cpus 8 -m miseq -o miseq_reads'
+    iss_cmd = f'''iss generate -g multifasta.fna --abundance_file abundances.txt --cpus {threads} -m miseq -o miseq_reads'''
     os.system(iss_cmd)
