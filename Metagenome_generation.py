@@ -129,5 +129,5 @@ if __name__ == '__main__':
     prepared_abudances = update_genomes(genomes_dir, abundances)
     wr_code = write_multifasta(prepared_abudances, genomes_dir)
     print('\n')
-    iss_cmd = f'''iss generate -g multifasta.fna --abundance_file abundances.txt --cpus {threads} -m miseq -o miseq_reads'''
+    iss_cmd = f'''iss generate -g multifasta.fna --abundance_file abundances.txt --cpus {n_threads} -m miseq -o miseq_reads'''
     os.system(iss_cmd)
