@@ -83,14 +83,14 @@ def find_minimal_refill(metagenome: List[str], metabolites_specified: List[str],
     return do_hits(metagenome, metabolic_needs)
 
 
-def append_species_refill(abudances: pd.DataFrame, species_to_refill: list[str]) -> pd.DataFrame:
+def append_species_refill(abudances: pd.DataFrame, species_to_refill: set) -> pd.DataFrame:
     """
     Append species to an existing dataframe of abundances and adjust abundance levels to maintain normalization.
 
     Args:
         abudances: A pandas DataFrame with two columns, the first containing species names and the second
             containing abundance levels.
-        species_to_refill: A list of species names to add to the abundance dataframe.
+        species_to_refill: A set of species names to add to the abundance dataframe.
     Returns:
         A pandas DataFrame with the new species added and abundance levels adjusted to maintain normalization.
     Raises:
