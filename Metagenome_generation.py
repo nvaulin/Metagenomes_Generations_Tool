@@ -22,9 +22,11 @@ def parse_args():
     parser.add_argument('-p', '--phenotype', default='2_species', nargs='?',
                         help='the base phenotype for metagenome construction ("Health", "HIV")')
     parser.add_argument('-m', '--metagenome_file', default=None, nargs='?',
-                        help='read metagenome composition from the file (tsv with species and abudances)')
+                        help='read metagenome composition from the file (tsv with species and abundances)')
     parser.add_argument('--pathways', default=None, nargs='?',
                         help='read matebolic pathways to account from the file (each pathway on the new line')
+    parser.add_argument('--metabolites', default=None, nargs='?',
+                        help='read metabolites pathways to account for')
     parser.add_argument('-c', '--n_core', default=None, nargs='?',
                         help='number of core species to leave in metagenome')
     parser.add_argument('-t', '--threads', default=1, help='number of threads (cores)')
@@ -130,6 +132,7 @@ if __name__ == '__main__':
     pheno = parse_args().phenotype
     metagenome_file = parse_args().metagenome_file
     pathways = parse_args().pathways
+    metabolites = parse_args().metabolites
     n_core = parse_args().n_core
     n_threads = parse_args().threads
     email = parse_args().email
@@ -148,12 +151,27 @@ if __name__ == '__main__':
         abundances = abundances.sort_values(by='abundance', ascending=False).head(n_core)
     pathways_db = pd.read_csv(os.path.join('Databases',
                                            'MetaCyc_pathways_by_species.csv'), sep='\t').dropna(inplace=True)
+
+    species_to_refill = []
+
+    if metabolites is not None:
+        for metabolite in metabolites:
+            metabol_cmd = f'python clusters.py -M {metabolite} -P {pheno}'
+            result = subprocess.run(metabol_cmd.split())
+
     if pathways is not None:
         print('Reading required pathways...')
         pathways_specified = read_pathways(pathways)
         species_to_refill = find_minimal_refill(abundances[0].to_list(),
                                                 pathways_specified)
+
+    if os.path.isfile('bacteria_metab.txt'):
+        with open('bacteria_metab.txt', 'r') as file:
+            for bacteria in file:
+                species_to_refill.append(bacteria)
+    if species_to_refill:
         abundances = append_species_refill(abundances, species_to_refill)
+
     prepared_abudances = update_genomes(GENOMES_DIR, abundances, n_threads)
     wr_code = write_multifasta(prepared_abudances, GENOMES_DIR)
     print('\n')
