@@ -170,7 +170,7 @@ if __name__ == '__main__':
             for bacteria in file:
                 species_to_refill.append(bacteria)
     if species_to_refill:
-        abundances = append_species_refill(abundances, species_to_refill)
+        abundances = append_species_refill(abundances, set(species_to_refill))
 
     prepared_abudances = update_genomes(GENOMES_DIR, abundances, n_threads)
     wr_code = write_multifasta(prepared_abudances, GENOMES_DIR)
