@@ -23,7 +23,7 @@ def parse_args():
                         help='the base phenotype for metagenome construction ("Health", "HIV")')
     parser.add_argument('-m', '--metagenome_file', default=None, nargs='?',
                         help='read metagenome composition from the file (tsv with species and abudances)')
-    parser.add_argument('pathways', default=None, nargs='?',
+    parser.add_argument('--pathways', default=None, nargs='?',
                         help='read matebolic pathways to account from the file (each pathway on the new line')
     parser.add_argument('-c', '--n_core', default=None, nargs='?',
                         help='number of core species to leave in metagenome')
