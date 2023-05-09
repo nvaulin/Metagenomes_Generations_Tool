@@ -3,6 +3,7 @@ import argparse
 import yaml
 import subprocess
 import pandas as pd
+from typing import List, Dict, Tuple
 from Bio import Entrez
 from pysat.examples.hitman import Hitman
 
@@ -24,44 +25,29 @@ def parse_args():
                         help='read metagenome composition from the file (tsv with species and abudances)')
     parser.add_argument('pathways', default=None, nargs='?',
                         help='read matebolic pathways to account from the file (each pathway on the new line')
-    parser.add_argument('n_core', default=None, nargs='?',
+    parser.add_argument('-c', '--n_core', default=None, nargs='?',
                         help='number of core species to leave in metagenome')
     parser.add_argument('-t', '--threads', default=1, help='number of threads (cores)')
-    parser.add_argument('email', default='example@email.com', nargs='?',
+    parser.add_argument('--email', default='example@email.com', nargs='?',
                         help='Email address for Entrez requests')
-    parser.add_argument('api_key', default=None, nargs='?',
+    parser.add_argument('--api_key', default=None, nargs='?',
                         help='NCBI API key for Entrez requests (if any)')
 
     return parser.parse_args()
 
 
-def filter_pathways_db(pathways_db):
-    junk_tax_ranges = ['Metazoa', 'Embryophyta', 'Tracheophyta', 'Pinidae', 'Brassicales', 'Gunneridae',
-                       'Spermatophyta', 'Vertebrata <vertebrates>', 'Fungi', 'Eukaryota', 'Mammalia',
-                       'cellular organisms', 'Viridiplantae', 'Magnoliopsida', 'Fungi // Viridiplantae',
-                       'Fungi // Metazoa', 'Viruses // Metazoa']
-    for junk_entry in junk_tax_ranges:
-        pathways_db = pathways_db[pathways_db['Taxonomic-Range'] != junk_entry]
-    selection = pathways_db['Taxonomic-Range'].str.contains('bact')
-    return pathways_db[selection]
+def do_hits(metagenome: list, metabolic_needs: list[list]) -> list:
+    """
+    This function uses the Hitman package to calculate minimal refill required for metabolic pathways specified
+    in a given metabolic database.
 
+    Args:
+    metagenome (List[str]): A list of metabolic species in the metagenome.
+    metabolic_needs (List[List[str]]): A list of lists of metabolites required for each metabolic pathway.
 
-def preprocess_pathways_db(pathways_db):
-    pathways_db.Pathways = pathways_db[['Pathways']].replace('\(?<i>.+</i>\)?', '', regex=True)
-    pathways_db['Species'] = pathways_db['Species'].str.split('//').apply(
-        lambda l: [x.strip() for x in l]).values.tolist()
-    all_species = [item.strip() for sublist in pathways_db['Species'].values.tolist() for item in sublist]
-    pathways_db_exp = pathways_db[['Pathways', 'Species']].explode('Species')
-    euks = ['Homo sapiens', 'Arabidopsis thaliana', 'Saccharomyces cerevisiae', 'Glycine max', 'Pisum sativum',
-            'Rattus norvegicus', 'Solanum lycopersicum', 'Oryza sativa', 'Nicotiana tabacum']
-    mask = pathways_db_exp.Species.isin(euks)
-    pathways_db_exp = pathways_db_exp[~mask]
-    pathways_db_ct = pd.crosstab(index=pathways_db_exp.Pathways, columns=pathways_db_exp.Species)
-    pathways_db_ct = pathways_db_ct.astype(bool).astype(int)
-    return pathways_db_ct
-
-
-def do_hits(metagenome: list, metabolic_needs: list[list]):
+    Returns:
+    List[str]: A list representing the species needed to account for the specified metabolites.
+    """
     h = Hitman(solver='m22', htype='lbx')
     metagenome = set(metagenome)
     needs_to_hit = []
@@ -74,14 +60,41 @@ def do_hits(metagenome: list, metabolic_needs: list[list]):
     return h.get()
 
 
-def find_minimal_refill(metagenome, metabolites_specified, pathways_db):
+def find_minimal_refill(metagenome: List[str], metabolites_specified: List[str],
+                        pathways_db: pd.DataFrame) -> List[str]:
+    """
+    Given a metagenome composition, a list of metabolites, and a pathways database,
+    find the minimal set of additional species that are needed to account for the given metabolites.
+
+    Args:
+        metagenome (List[str]): A list of species present in baseline metagenome.
+        metabolites_specified (List[str]): A list of metabolite names that need to be accounted for.
+        pathways_db (pd.DataFrame): A pandas DataFrame containing the pathways database,
+            where rows represent metabolites and columns represent pathways.
+            The values are boolean indicating whether a metabolite is present in a pathway.
+    Returns:
+        List[str]: A list representing the species needed to account for the specified metabolites.
+    """
     cols = pathways_db.columns
     selected_bathways = pathways_db.loc[metabolites_specified].astype('bool')
     metabolic_needs = selected_bathways.apply(lambda x: list(cols[x.values]), axis=1).to_list()
     return do_hits(metagenome, metabolic_needs)
 
 
-def append_species_refill(abudances, species_to_refill):
+def append_species_refill(abudances: pd.DataFrame, species_to_refill: list[str]) -> pd.DataFrame:
+    """
+    Append species to an existing dataframe of abundances and adjust abundance levels to maintain normalization.
+
+    Args:
+        abudances: A pandas DataFrame with two columns, the first containing species names and the second
+            containing abundance levels.
+        species_to_refill: A list of species names to add to the abundance dataframe.
+    Returns:
+        A pandas DataFrame with the new species added and abundance levels adjusted to maintain normalization.
+    Raises:
+        ValueError: If the input dataframe does not have the expected two columns, or if the second column
+            does not contain numeric data.
+    """
     abundance_level = abudances[1].mean()
     abundances_refill = pd.DataFrame([species_to_refill,
                                       [abundance_level] * len(species_to_refill)],
@@ -91,7 +104,17 @@ def append_species_refill(abudances, species_to_refill):
     return abudances_new
 
 
-def read_pathways(pathways_input):
+def read_pathways(pathways_input: str) -> List[str]:
+    """Reads metabolic pathways from a file or a comma-separated string.
+
+    Args:
+        pathways_input (str): Path to a file or a comma-separated string containing metabolic pathways.
+    Returns:
+        List of strings: A list of metabolic pathway names.
+    Raises:
+        ValueError: If the input is not a valid path to a file or a comma-separated string.
+
+    """
     print(pathways_input)
     if os.path.isfile(pathways_input):
         with open(pathways_input, 'r') as f:
@@ -121,25 +144,23 @@ if __name__ == '__main__':
     abundances = pd.read_csv(os.path.join('baseline_phenotypes', pheno + '.tsv'), sep='\t', header=None)
     abundances.rename({0: 'species', 1: 'abundance'}, axis=1, inplace=True)
     if n_core:
-        n_core = min(n_core, len(abundances))
-        abundances = abundances.sort_values(by='abundance').head(n_core)
+        n_core = min(int(n_core), len(abundances))
+        abundances = abundances.sort_values(by='abundance', ascending=False).head(n_core)
     pathways_db = pd.read_csv(os.path.join('Databases',
-                                           'Pathways_MetaCyc.txt'), sep='\t').dropna(inplace=True)
-    # pathways_db = filter_pathways_db(pathways_db)
-    # pathways_db = preprocess_pathways_db(pathways_db)
+                                           'MetaCyc_pathways_by_species.csv'), sep='\t').dropna(inplace=True)
     if pathways is not None:
         print('Reading required pathways...')
         pathways_specified = read_pathways(pathways)
         species_to_refill = find_minimal_refill(abundances[0].to_list(),
                                                 pathways_specified)
         abundances = append_species_refill(abundances, species_to_refill)
-    prepared_abudances = update_genomes(GENOMES_DIR, abundances)
+    prepared_abudances = update_genomes(GENOMES_DIR, abundances, n_threads)
     wr_code = write_multifasta(prepared_abudances, GENOMES_DIR)
     print('\n')
 
     iss_params = {
         '-g': os.path.join(GENOMES_DIR, 'multifasta.fna'),
-        '--abundance_file': os.path.join(RESULTS_DIR, 'abundances.txt'),
+        '--abundance_file': os.path.join(RESULTS_DIR, 'abundances_for_iss.txt'),
         '-m': 'miseq',
         '-o': os.path.join(RESULTS_DIR, 'miseq_reads'),
         '--cpus': n_threads
