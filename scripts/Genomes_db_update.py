@@ -80,12 +80,10 @@ def update_genomes(genomes_dir, abundances):
             url = 'https://' + url + '/' + label + '_genomic.fna.gz'
             urllib.request.urlretrieve(url, os.path.join(genomes_dir, fna_filename))
 
-        # specie_abundance_df = pd.DataFrame([tax_id, abundance], columns=['taxid', 'abundance'])
-        # prepared_abundances = pd.concat([prepared_abundances, specie_abundance_df])
         prepared_abundances.loc[len(prepared_abundances)] = [str(tax_id), abundance]
-    print('Genomes prepares, writing abundances.txt file')
+    print('Genomes prepares, writing results/abundances.txt file')
     prepared_abundances.abundance = prepared_abundances.abundance / prepared_abundances.abundance.sum()
-    prepared_abundances.to_csv('abundances.txt', sep='\t', index=False, header=False)
+    prepared_abundances.to_csv( os.path.join('results', 'abundances.txt'), sep='\t', index=False, header=False)
     return prepared_abundances
 
 
@@ -99,5 +97,5 @@ def write_multifasta(prepared_abudances, genomes_dir):
                 seq_str += record.seq.strip('\n')
         seq_record = SeqRecord(seq=seq_str, id=tax_id, name=tax_id, description='')
         sequences.append(seq_record)
-    wr_code = SeqIO.write(sequences, os.path.join('multifasta.fna'), "fasta-2line")
+    wr_code = SeqIO.write(sequences, os.path.join('../multifasta.fna'), "fasta-2line")
     return wr_code

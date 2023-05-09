@@ -1,10 +1,15 @@
 import os
 import argparse
+import yaml
+import subprocess
 import pandas as pd
 from Bio import Entrez
 from pysat.examples.hitman import Hitman
 
-from Genomes_db_update import update_genomes, write_multifasta
+from scripts.Genomes_db_update import update_genomes, write_multifasta
+
+GENOMES_DIR = 'genomes'
+RESULTS_DIR = 'results'
 
 
 def parse_args():
@@ -110,13 +115,15 @@ if __name__ == '__main__':
     Entrez.email = email
     if api_key is not None:
         Entrez.api_key = api_key
-    genomes_dir = os.path.join('genomes')
+
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+
     abundances = pd.read_csv(os.path.join('baseline_phenotypes', pheno + '.tsv'), sep='\t', header=None)
     abundances.rename({0: 'species', 1: 'abundance'}, axis=1, inplace=True)
     if n_core:
         n_core = min(n_core, len(abundances))
         abundances = abundances.sort_values(by='abundance').head(n_core)
-    pathways_db = pd.read_csv(os.path.join('Metabolites_database',
+    pathways_db = pd.read_csv(os.path.join('Databases',
                                            'Pathways_MetaCyc.txt'), sep='\t').dropna(inplace=True)
     # pathways_db = filter_pathways_db(pathways_db)
     # pathways_db = preprocess_pathways_db(pathways_db)
@@ -126,8 +133,24 @@ if __name__ == '__main__':
         species_to_refill = find_minimal_refill(abundances[0].to_list(),
                                                 pathways_specified)
         abundances = append_species_refill(abundances, species_to_refill)
-    prepared_abudances = update_genomes(genomes_dir, abundances)
-    wr_code = write_multifasta(prepared_abudances, genomes_dir)
+    prepared_abudances = update_genomes(GENOMES_DIR, abundances)
+    wr_code = write_multifasta(prepared_abudances, GENOMES_DIR)
     print('\n')
-    iss_cmd = f'''iss generate -g multifasta.fna --abundance_file abundances.txt --cpus {n_threads} -m miseq -o miseq_reads'''
-    os.system(iss_cmd)
+
+    iss_params = {
+        '-g': os.path.join(GENOMES_DIR, 'multifasta.fna'),
+        '--abundance_file': os.path.join(RESULTS_DIR, 'abundances.txt'),
+        '-m': 'miseq',
+        '-o': os.path.join(RESULTS_DIR, 'miseq_reads'),
+        '--cpus': n_threads
+    }
+    with open('iss_params.yml', 'r') as f:
+        yaml_params = yaml.safe_load(f)
+        iss_params = iss_params | yaml_params
+
+    iss_cmd = ['iss', 'generate'] + [str(item) for pair in iss_params.items() for item in pair]
+    result = subprocess.run(iss_cmd)
+    if result.returncode == 0:
+        print('\nThe metagenome was successfully generated!')
+    else:
+        print('\nThe metagenome generation completed with errors.')
