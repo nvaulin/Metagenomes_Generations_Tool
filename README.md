@@ -35,7 +35,7 @@ python Metagenome_generation.py 2_species
 With the real baseline phenotypes its better to select `n` core species with the `ncore` option.
 To test the pathways correction use the `example_pathways.txt` file:
 ```bash
-python Metagenome_generation.py -p Healts -c 10 --pathways example_pathways.txt
+python Metagenome_generation.py -p Health -c 10 --pathways example_pathways.txt
 ```
 
 To get more information about the particular script, run:
