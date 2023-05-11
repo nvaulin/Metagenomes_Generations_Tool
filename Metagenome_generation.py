@@ -78,8 +78,8 @@ def find_minimal_refill(metagenome: List[str], metabolites_specified: List[str],
         List[str]: A list representing the species needed to account for the specified metabolites.
     """
     cols = pathways_db.columns
-    selected_bathways = pathways_db.loc[metabolites_specified].astype('bool')
-    metabolic_needs = selected_bathways.apply(lambda x: list(cols[x.values]), axis=1).to_list()
+    selected_pathways = pathways_db.loc[metabolites_specified].astype('bool')
+    metabolic_needs = selected_pathways.apply(lambda x: list(cols[x.values]), axis=1).to_list()
     return do_hits(metagenome, metabolic_needs)
 
 
@@ -97,12 +97,12 @@ def append_species_refill(abudances: pd.DataFrame, species_to_refill: set) -> pd
         ValueError: If the input dataframe does not have the expected two columns, or if the second column
             does not contain numeric data.
     """
-    abundance_level = abudances[1].mean()
+    abundance_level = abudances.abundance.mean()
     abundances_refill = pd.DataFrame([species_to_refill,
-                                      [abundance_level] * len(species_to_refill)],
-                                     index=[0, 1]).transpose()
+                                      [abundance_level] * len(species_to_refill)]).transpose()
+    abundances_refill.columns = abundances.columns
     abudances_new = pd.concat([abudances, abundances_refill])
-    abudances_new[1] = abudances_new[1] / abudances_new[1].sum()
+    abudances_new['abundance'] = abudances_new.abundance / abudances_new.abundance.sum()
     return abudances_new
 
 
@@ -117,10 +117,9 @@ def read_pathways(pathways_input: str) -> List[str]:
         ValueError: If the input is not a valid path to a file or a comma-separated string.
 
     """
-    print(pathways_input)
     if os.path.isfile(pathways_input):
         with open(pathways_input, 'r') as f:
-            pathways = f.readlines()
+            pathways = [line.strip() for line in f.readlines()]
     elif ',' in pathways_input:
         pathways = pathways_input.split(',')
     else:
@@ -149,8 +148,7 @@ if __name__ == '__main__':
     if n_core:
         n_core = min(int(n_core), len(abundances))
         abundances = abundances.sort_values(by='abundance', ascending=False).head(n_core)
-    pathways_db = pd.read_csv(os.path.join('Databases',
-                                           'MetaCyc_pathways_by_species.csv'), sep='\t').dropna(inplace=True)
+    pathways_db = pd.read_csv(os.path.join('Databases', 'MetaCyc_pathways_by_species.csv'), sep=',', index_col='Pathways')
 
     species_to_refill = []
 
@@ -162,8 +160,8 @@ if __name__ == '__main__':
     if pathways is not None:
         print('Reading required pathways...')
         pathways_specified = read_pathways(pathways)
-        species_to_refill = find_minimal_refill(abundances[0].to_list(),
-                                                pathways_specified)
+        species_to_refill = find_minimal_refill(abundances.species.to_list(),
+                                                pathways_specified, pathways_db)
 
     if os.path.isfile('bacteria_metab.txt'):
         with open('bacteria_metab.txt', 'r') as file:
