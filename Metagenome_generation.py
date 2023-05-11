@@ -3,7 +3,7 @@ import argparse
 import yaml
 import subprocess
 import pandas as pd
-from typing import List, Dict, Tuple
+from typing import List
 from Bio import Entrez
 from pysat.examples.hitman import Hitman
 
@@ -38,38 +38,45 @@ def parse_args():
     return parser.parse_args()
 
 
-def do_hits(metagenome: list, metabolic_needs: list[list]) -> list:
+def do_hits(metagenome: pd.DataFrame, metabolic_needs: list[list], total_metagenome: pd.DataFrame) -> list:
     """
     This function uses the Hitman package to calculate minimal refill required for metabolic pathways specified
     in a given metabolic database.
 
     Args:
-    metagenome (List[str]): A list of metabolic species in the metagenome.
+    metagenome (pd.DataFrame): Baseline metagenome (total or core)
     metabolic_needs (List[List[str]]): A list of lists of metabolites required for each metabolic pathway.
+    total_metagenome (pd.DataFrame): Total baseline metagenome
 
     Returns:
     List[str]: A list representing the species needed to account for the specified metabolites.
     """
-    h = Hitman(solver='m22', htype='lbx')
-    metagenome = set(metagenome)
+    metagenome_species = set(metagenome.species.to_list())
     needs_to_hit = []
     for metabolic_need in metabolic_needs:
         metabolic_need = set(metabolic_need)
-        if not set.intersection(metabolic_need, metagenome):
+        if not set.intersection(metabolic_need, metagenome_species):
             needs_to_hit.append(metabolic_need)
-    for need in needs_to_hit:
-        h.hit(need)
-    return h.get()
+    possible_hits = []
+    with Hitman(bootstrap_with=needs_to_hit, htype='sorted') as hitman:
+        for hs in hitman.enumerate():
+            possible_hits.append(hs)
+    hits_scores = []
+    for hit in possible_hits:
+        hits_scores.append(total_metagenome[total_metagenome['species'].isin(hit)]['abundance'].sum() / len(hit))
+    max_index = max(range(len(hits_scores)), key=lambda i: hits_scores[i])
+    best_hit = possible_hits[max_index]
+    return best_hit
 
 
-def find_minimal_refill(metagenome: List[str], metabolites_specified: List[str],
-                        pathways_db: pd.DataFrame) -> List[str]:
+def find_minimal_refill(metagenome: pd.DataFrame, metabolites_specified: List[str],
+                        pathways_db: pd.DataFrame, total_metagenome) -> List[str]:
     """
     Given a metagenome composition, a list of metabolites, and a pathways database,
     find the minimal set of additional species that are needed to account for the given metabolites.
 
     Args:
-        metagenome (List[str]): A list of species present in baseline metagenome.
+        metagenome (pd.Dataframe): Baseline metagenome (total or core)
         metabolites_specified (List[str]): A list of metabolite names that need to be accounted for.
         pathways_db (pd.DataFrame): A pandas DataFrame containing the pathways database,
             where rows represent metabolites and columns represent pathways.
@@ -78,9 +85,13 @@ def find_minimal_refill(metagenome: List[str], metabolites_specified: List[str],
         List[str]: A list representing the species needed to account for the specified metabolites.
     """
     cols = pathways_db.columns
+
+    missing_pathways = set(metabolites_specified) - set(pathways_db.index)
+    if missing_pathways:
+        raise KeyError(f"The following elements are missing: {list(missing_pathways)}")
     selected_pathways = pathways_db.loc[metabolites_specified].astype('bool')
     metabolic_needs = selected_pathways.apply(lambda x: list(cols[x.values]), axis=1).to_list()
-    return do_hits(metagenome, metabolic_needs)
+    return do_hits(metagenome, metabolic_needs, total_metagenome)
 
 
 def append_species_refill(abudances: pd.DataFrame, species_to_refill: set) -> pd.DataFrame:
@@ -145,10 +156,12 @@ if __name__ == '__main__':
 
     abundances = pd.read_csv(os.path.join('baseline_phenotypes', pheno + '.tsv'), sep='\t', header=None)
     abundances.rename({0: 'species', 1: 'abundance'}, axis=1, inplace=True)
+    total_metagenome = abundances.copy()
     if n_core:
         n_core = min(int(n_core), len(abundances))
         abundances = abundances.sort_values(by='abundance', ascending=False).head(n_core)
-    pathways_db = pd.read_csv(os.path.join('Databases', 'MetaCyc_pathways_by_species.csv'), sep=',', index_col='Pathways')
+    pathways_db = pd.read_csv(os.path.join('Databases', 'MetaCyc_pathways_by_species.csv'), sep=';',
+                              index_col='Pathways')
 
     species_to_refill = []
 
@@ -160,8 +173,7 @@ if __name__ == '__main__':
     if pathways is not None:
         print('Reading required pathways...')
         pathways_specified = read_pathways(pathways)
-        species_to_refill = find_minimal_refill(abundances.species.to_list(),
-                                                pathways_specified, pathways_db)
+        species_to_refill = find_minimal_refill(abundances, pathways_specified, pathways_db, total_metagenome)
 
     if os.path.isfile('bacteria_metab.txt'):
         with open('bacteria_metab.txt', 'r') as file:
@@ -187,6 +199,9 @@ if __name__ == '__main__':
 
     iss_cmd = ['iss', 'generate'] + [str(item) for pair in iss_params.items() for item in pair]
     result = subprocess.run(iss_cmd)
+
+    if os.path.exists(os.path.join(genomes_dir, 'multifasta.fna')):
+        os.remove(os.path.join(genomes_dir, 'multifasta.fna'))
     if result.returncode == 0:
         print('\nThe metagenome was successfully generated!')
     else:
