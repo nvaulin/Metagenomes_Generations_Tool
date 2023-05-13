@@ -56,4 +56,4 @@ rm -rf Metagenomes_Generations_Tool
 ### Citation
 
 If you use these tool, please cite as:
-- Vaulin N., Chechenina A., Ivanov. A, Uliantsev V. (2023). Metagenomes metageneration metatool. Природа, 2023, 443, 27–28
+- Vaulin N., Chechenina A., Ivanov. A, Uliantsev V. Metagenomes metageneration metatool. Природа, 2023, 443, 27–28
